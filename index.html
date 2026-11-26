@@ -57,6 +57,13 @@
   td.num,th.num{text-align:right}
   .chip{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;border-radius:5px;padding:2px 7px;background:rgba(255,255,255,.08);white-space:nowrap}
   .chip.o2{background:var(--green-soft);color:var(--green)}
+  .x{display:block;font-size:11.5px;color:var(--green);font-weight:700}
+  .x.n{color:var(--subtle);font-weight:600}
+  .aviso{display:block;font-size:11px;color:var(--muted);margin-top:2px}
+  td.pp{min-width:280px;max-width:420px}
+  td.pp a{display:block;color:var(--text);text-decoration:none;margin-bottom:6px;font-size:12.5px}
+  td.pp a:hover,td.pp a:focus-visible{color:var(--green);text-decoration:underline}
+  td.pp small{color:var(--muted);font-size:11.5px}
   .hl{color:var(--green);font-weight:700}
   select{background:var(--surface);color:var(--text);border:1px solid var(--border-2);border-radius:8px;font:600 12.5px var(--font);padding:6px 10px}
   .row{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
@@ -126,13 +133,23 @@
     <div class="card"><h3>Alcance por dia: sem anúncio e por anúncio</h3><p class="c">Mostra o quanto a conta depende do investimento para ser vista.</p><div class="chart"><canvas id="ch-mix"></canvas></div></div>
   </div>
 
-  <h2><span class="n">3</span>Seguidores, visitas e cliques</h2>
+  <h2><span class="n">3</span>Picos sem anúncio</h2>
+  <div class="card">
+    <h3>Dias em que o conteúdo bombou sozinho</h3>
+    <p class="c" id="picos-c"></p>
+    <div class="chart"><canvas id="ch-picos"></canvas></div>
+  </div>
+  <div class="card" style="margin-top:12px">
+    <div class="tbl"><table><thead><tr><th>Pico</th><th>Conta</th><th class="num">Alcance sem anúncio</th><th class="num">Público novo</th><th class="num">Cliques no link</th><th class="num">Seguiram</th><th>O que saiu (véspera e dia)</th></tr></thead><tbody id="picos"></tbody></table></div>
+  </div>
+
+  <h2><span class="n">4</span>Seguidores, visitas e cliques</h2>
   <div class="grid2">
     <div class="card"><h3>Seguidores por dia</h3><p class="c">Quem começou a seguir e quem deixou de seguir.</p><div class="chart"><canvas id="ch-seg"></canvas></div></div>
     <div class="card"><h3>Visitas ao perfil e cliques no link</h3><p class="c">Visitas contam todas as origens, inclusive anúncio.</p><div class="chart"><canvas id="ch-vis"></canvas></div></div>
   </div>
 
-  <h2><span class="n">4</span>Melhores conteúdos</h2>
+  <h2><span class="n">5</span>Melhores conteúdos</h2>
   <div class="card">
     <div class="row"><p class="c" style="margin:0" id="posts-c"></p>
       <label style="font-size:12.5px;color:var(--muted)">Ordenar por <select id="ord" aria-label="Ordenar por">
@@ -141,12 +158,12 @@
     <div class="tbl"><table><thead><tr><th>#</th><th>Post</th><th>Conta</th><th>Formato</th><th>Data</th><th class="num">Alcance</th><th class="num">Interações</th><th class="num">Salv.</th><th class="num">Compart.</th><th class="num">Taxa</th><th class="num">× mediana</th></tr></thead><tbody id="posts"></tbody></table></div>
   </div>
 
-  <h2><span class="n">5</span>O que rende por formato</h2>
+  <h2><span class="n">6</span>O que rende por formato</h2>
   <div class="card"><p class="c">Mediana por post no período.</p>
     <div class="tbl"><table style="min-width:520px"><thead><tr><th>Formato</th><th class="num">Posts</th><th class="num">Alcance</th><th class="num">Interações</th><th class="num">Salv. + compart.</th><th class="num">Taxa</th></tr></thead><tbody id="fmts"></tbody></table></div>
   </div>
 
-  <h2><span class="n">6</span>Quem segue</h2>
+  <h2><span class="n">7</span>Quem segue</h2>
   <div class="grid2" id="pub"></div>
 
   </div>
@@ -259,7 +276,70 @@
       {label:'Cliques no link', data:S.map(function(x){return x.website_clicks;}), borderColor:css('--green'), backgroundColor:css('--green'), tension:.25, pointRadius:0, yAxisID:'y1'}], false, true);
 
     renderPosts(cur);
+    renderPicos(cur, lab);
     renderPublico();
+  }
+
+  var PICO_ORG = 1.8, PICO_ORG_MIN = 150, PICO_CLI = 2, PICO_CLI_MIN = 4, JANELA = 28;
+  function somaDia(d, ks){ var a=(d&&d.alcance)||{}; return ks.reduce(function(s,k){ return s+(a[k]||0); },0); }
+  function maisDias(iso, n){ var t=new Date(iso+'T12:00:00Z'); t.setUTCDate(t.getUTCDate()+n); return t.toISOString().slice(0,10); }
+  function quandoBRT(s){ var t=new Date(String(s).replace(/\+0000$/,'Z')); t=new Date(t.getTime()-3*3600e3); return {dia:t.toISOString().slice(0,10), hora:t.toISOString().slice(11,16)}; }
+
+  function picosConta(c){
+    var H = (D.hist.contas||{})[c]||{}, ds = Object.keys(H).sort(), out = {};
+    var org = ds.map(function(d){ return somaDia(H[d],['org_seg','org_nao']); });
+    var pago = ds.map(function(d){ return somaDia(H[d],['pago_seg','pago_nao']); });
+    var cli = ds.map(function(d){ return H[d].website_clicks||0; });
+    for(var i=14;i<ds.length;i++){
+      var j=Math.max(0,i-JANELA);
+      var mo=mediana(org.slice(j,i)), mc=mediana(cli.slice(j,i)), mp=mediana(pago.slice(j,i));
+      var po = mo>0 && org[i]>=PICO_ORG*mo && org[i]-mo>=PICO_ORG_MIN;
+      var pc = cli[i]>=Math.max(PICO_CLI*mc, mc+PICO_CLI_MIN);
+      if(po||pc) out[ds[i]] = {org:org[i], xo:mo?org[i]/mo:null, po:po, cli:cli[i], xc:mc?cli[i]/mc:null, pc:pc,
+        novo:somaDia(H[ds[i]],['org_nao']), seg:H[ds[i]].seguiram||0, ads:mp>0 && pago[i]>=PICO_ORG*mp};
+    }
+    return out;
+  }
+
+  function renderPicos(cur, lab){
+    var ini = cur[0]||'0000', fim = cur[cur.length-1]||'9999', grupos = [], marca = {};
+    contas().forEach(function(c){
+      var P = picosConta(c), dias = Object.keys(P).filter(function(d){ return d>=ini && d<=fim; }).sort(), g = null;
+      dias.forEach(function(d){
+        marca[d] = marca[d] || {}; if(P[d].po) marca[d].o=1; if(P[d].pc) marca[d].c=1;
+        if(g && maisDias(g.dias[g.dias.length-1],1)===d){ g.dias.push(d); } else { g = {conta:c, dias:[d]}; grupos.push(g); }
+      });
+      grupos.forEach(function(g){ if(g.conta===c) g.info = g.dias.map(function(d){ return P[d]; }); });
+    });
+    grupos.sort(function(a,b){ return a.dias[0]<b.dias[0]?1:-1; });
+
+    var nO = grupos.filter(function(g){ return g.info.some(function(x){return x.po;}); }).length;
+    var nC = grupos.filter(function(g){ return g.info.some(function(x){return x.pc;}); }).length;
+    $('picos-c').textContent = 'Pico é o dia em que o alcance sem anúncio chegou a '+fmt(PICO_ORG,1)+' vez o normal (a mediana dos '+JANELA+' dias anteriores), ou em que os cliques no link da bio dobraram. No período: '+nO+' pico'+(nO===1?'':'s')+' de alcance e '+nC+' de cliques. Cliques no link não separam anúncio; quando o anúncio também subiu no dia, a tabela avisa.';
+
+    var S = serie(cur);
+    var raio = function(t){ return cur.map(function(d){ return (marca[d]&&marca[d][t])?5:0; }); };
+    desenha('ch-picos','line',lab,[
+      {label:'Alcance sem anúncio', data:S.map(function(x){return x.org_seg+x.org_nao;}), borderColor:css('--green'), backgroundColor:css('--green'), tension:.25, pointRadius:raio('o'), pointHoverRadius:6, yAxisID:'y'},
+      {label:'Cliques no link', data:S.map(function(x){return x.website_clicks;}), borderColor:css('--gray'), backgroundColor:css('--soft'), tension:.25, pointRadius:raio('c'), pointHoverRadius:6, yAxisID:'y1'}], false, true);
+    charts['ch-picos'].options.scales.y1.ticks.color = css('--gray'); charts['ch-picos'].update();
+
+    if(!grupos.length){ $('picos').innerHTML = '<tr><td colspan="7">Nenhum pico no período.</td></tr>'; return; }
+    $('picos').innerHTML = grupos.map(function(g){
+      var a=g.dias[0], b=g.dias[g.dias.length-1];
+      var top = g.info.reduce(function(m,x){ return (x.xo||0)>(m.xo||0)?x:m; }, g.info[0]);
+      var topC = g.info.reduce(function(m,x){ return (x.xc||0)>(m.xc||0)?x:m; }, g.info[0]);
+      var orgTxt = fmt(top.org)+'<span class="x'+(g.info.some(function(x){return x.po;})?'':' n')+'">'+(top.xo?fmt(top.xo,1)+'× o normal':'–')+'</span>';
+      var cliTot = g.info.reduce(function(s,x){return s+x.cli;},0);
+      var cliPico = g.info.some(function(x){return x.pc;});
+      var cliTxt = fmt(cliTot)+'<span class="x'+(cliPico?'':' n')+'">'+(topC.xc?fmt(topC.xc,1)+'× o normal':(cliPico?'acima do normal':'–'))+'</span>'+(cliPico && g.info.some(function(x){return x.pc&&x.ads;})?'<span class="aviso">anúncio também subiu</span>':'');
+      var ps = [];
+      Object.keys(D.posts||{}).forEach(function(c){ (D.posts[c]||[]).forEach(function(p){ ps.push(Object.assign({q:quandoBRT(p.data), conta:c}, p)); }); });
+      ps = ps.filter(function(p){ return p.q.dia>=maisDias(a,-1) && p.q.dia<=b; })
+        .sort(function(x,y){ return (x.conta===g.conta?0:1)-(y.conta===g.conta?0:1) || (x.q.dia+x.q.hora<y.q.dia+y.q.hora?-1:1); });
+      var lista = ps.length ? ps.map(function(p){ var outra = p.conta!==g.conta; return '<a href="'+p.link+'" target="_blank" rel="noopener">'+(outra?'<span class="chip'+(p.conta==='o2'?' o2':'')+'">'+NOME[p.conta]+'</span> ':'')+esc(p.titulo||'(sem legenda)')+'<br><small>'+p.formato+' · '+br(p.q.dia)+' '+p.q.hora+' · alcance '+fmt(p.reach)+'</small></a>'; }).join('') : '<small>Nenhum post na véspera nem no dia. Pode ser post antigo voltando a circular.</small>';
+      return '<tr><td style="white-space:nowrap">'+br(a)+(b!==a?' a '+br(b):'')+'</td><td><span class="chip '+(g.conta==='o2'?'o2':'')+'">'+NOME[g.conta]+'</span></td><td class="num">'+orgTxt+'</td><td class="num">'+fmt(g.info.reduce(function(s,x){return s+x.novo;},0))+'</td><td class="num">'+cliTxt+'</td><td class="num">'+fmt(g.info.reduce(function(s,x){return s+x.seg;},0))+'</td><td class="pp">'+lista+'</td></tr>';
+    }).join('');
   }
 
   function br(d){ var p=d.split('-'); return p[2]+'/'+p[1]; }
